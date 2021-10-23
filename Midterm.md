@@ -2,10 +2,11 @@
 title: "Midterm"
 author: "Haoran Zhang"
 date: "2021/10/21"
-output: 
-  html_document: 
-    keep_md: yes
-  github_document
+output:
+  html_document:
+    html_preview: false
+  github_document:
+always_allow_html: true
 ---
 
 
