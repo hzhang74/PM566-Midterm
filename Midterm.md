@@ -17,7 +17,7 @@ always_allow_html: true
 The COVID-19 has been impacting our world for over a year, causing economic distress, high rate of unemployment and tragic public health outcomes. Upon this situation, the society has changed drastically. For weeks, I've been receiving crime reports on campus, thus I want to find out if crime rates is related to the increasing COVID cases or unemployment rate in Los Angeles County.
 
 ## Method
-The data was acquired from Los Angeles Open Data website. First the arrest data will be analyzed and visualized, which follows the analysis of COVID-19 cases. Then I will combine the arrest data with the COVID-19 cases and unemployment rate, to show if there is an association between them.
+The data was acquired from Los Angeles Open Data website. First the arrest data will be analyzed and visualized, which follows the analysis of COVID-19 cases. Then I will combine the arrest data with the COVID-19 cases and unemployment rate, to show if there is an association between them. 
 ## Package Installation
 
 ```r
