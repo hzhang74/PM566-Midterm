@@ -1,0 +1,326 @@
+---
+title: "Midterm"
+author: "Haoran Zhang"
+date: "2021/10/21"
+output:
+  html_document: 
+    keep_md: yes
+    html_preview: false
+  github_document:
+always_allow_html: true
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+```
+
+## Introduction
+The COVID-19 has been impacting our world for over a year, causing economic distress, high rate of unemployment and tragic public health outcomes. Upon this situation, the society has changed drastically. For weeks, I've been receiving crime reports on campus, thus I want to find out if crime rates is related to the increasing COVID cases or unemployment rate in Los Angeles County.
+
+## Method
+The data was acquired from Los Angeles Open Data website. First the arrest data will be analyzed and visualized, which follows the analysis of COVID-19 cases. Then I will combine the arrest data with the COVID-19 cases and unemployment rate, to show if there is an association between them.
+## Package Installation
+```{r warning=FALSE}
+library(data.table)
+library(dtplyr)
+library(dplyr)
+library(readr)
+library(tidyverse)
+library(skimr)
+library(lubridate)
+library(leaflet)
+library(ggplot2)
+```
+## Data Operation
+```{r warning=FALSE}
+# Read CSV files
+arrest20 <- read.csv("Arrest_Data_2020.csv")
+arrest21 <- read.csv("Arrest_Data_2021.csv")
+# using rbind to combine two datasets
+arrest<- rbind(arrest20,arrest21)
+```
+## Transform the dates into date variables
+```{r warning=FALSE}
+arrest$Arrest_Date<-strptime(arrest$Arrest_Date,format="%Y/%m/%d") 
+arrest$Arrest_Date<-as.Date(arrest$Arrest_Date,format="%m/%d/%Y")
+arrest$year <- year(arrest$Arrest_Date)
+arrest$month <- month(arrest$Arrest_Date)
+arrest$day <- day(arrest$Arrest_Date)
+arrest$Booking_Date<-as.Date(arrest$Booking_Date,"%m/%d/%Y")
+
+```
+## remove data with unknown location and these ages are likely wrong(<8)
+```{r warning=FALSE}
+arrest20<-arrest20[!(arrest20$LAT==0 | arrest20$LAT==0 | arrest20$Age<8),]
+arrest21<-arrest21[!(arrest21$LAT==0 | arrest21$LAT==0 | arrest21$Age<8),]
+arrest<-arrest[!(arrest$LAT==0 | arrest$LAT==0 | arrest$Age<8),]
+```
+## Make a time category that partitions day into four sections
+```{r warning=FALSE}
+arrest$time_cat <- as.factor(ifelse(arrest$Time < 600, 'before_dawn',
+                          ifelse(arrest$Time < 1200, 'morning', 
+                          ifelse(arrest$Time < 1800, 'afternoon', "evening"))))
+# Make a table 
+table_time<-table(arrest$time_cat)
+knitr::kable(table_time,col.names = c("Time Category","Arrest Records"))
+```
+We can see that most arrests are recorded in the afternoon and in the evening. 
+## Categorize the age of arrest
+```{r warning=FALSE}
+arrest$age_cat <- as.factor(ifelse(arrest$Age < 20, '<20',
+                          ifelse(arrest$Age < 30, '20-30',
+                          ifelse(arrest$Age < 40, '30-40',
+                          ifelse(arrest$Age < 50, '40-50',
+                                 ">50")))))
+# Make a table
+table_age<-table(arrest$age_cat)
+knitr::kable(table_age,col.names = c("Age Category","Arrest Records"))
+```
+
+People age in 20-40 contribute the most arrest records.
+
+## Plot a histogram with age layers
+```{r warning=FALSE}
+arrest[!is.na(month) & !is.na(year) & !is.na(time)] %>%
+  ggplot() + 
+  geom_histogram(mapping = aes(x = arrest$Arrest_Date, fill = arrest$age_cat))+
+   scale_fill_viridis_d(option="magma")
+```
+
+The age category in the time range is kind of stable.
+
+## Barchart of Time Category and Arrest Count by Report Type
+```{r warning=FALSE}
+arrest[!is.na(arrest$time_cat),] %>%
+  ggplot() + 
+  geom_bar(mapping = aes(x = time_cat, fill = Report_Type), position = "dodge")+
+  xlab("Time Category") + ylab("Arrest Count")+
+  ggtitle("Barchart of Time Category and Arrest Count by Report Type")
+```
+
+In the afternoon, the largest number of suspects are likely to be released from custody while in the evening and before dawn, the suspects are more likely to be booked into jail.
+
+## Sex-specific Arrest Record
+```{r warning=FALSE}
+daily_count_sex<-arrest %>% 
+  group_by(Arrest_Date,Sex_Code) %>% 
+  summarise(total_arrest = n()
+            )
+daily_count_sex<-as.data.table(daily_count_sex)
+```
+## Barplot the table
+```{r warning=FALSE}
+arrest[] %>%
+  ggplot() + 
+  geom_bar(mapping = aes(x = age_cat, fill = Sex_Code), position = "dodge")+
+  scale_fill_viridis_d()+
+  xlab("Age") + ylab("Arrest Count")+
+  ggtitle("Barchart of Age Category by Sex")
+```
+
+Male's arrest record is much higher than female's, while both appear to be normal distributed, with age 20-30 the most frequently arrested while male a little left-skewed.
+## Averge Arrest Record Per Date group by Area
+```{r warning=FALSE}
+daily_count_area<-arrest %>% 
+  group_by(Arrest_Date,Area_Name) %>% 
+  summarise(total_arrest = n()
+            )
+daily_count_area<-as.data.table(daily_count_area)
+```
+## Make a boxplot 
+```{r warning=FALSE}
+daily_count_area[!is.na(Area_Name)] %>% 
+  ggplot()+
+  geom_boxplot(mapping=aes(x=Area_Name, y=total_arrest, fill=Area_Name))+
+  xlab("Area") + ylab("Arrest Count")+
+  ggtitle("Averge Arrest Record Per Date group by Area")+
+  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5,size = 10))
+```
+
+By the plot above, 77th Street has the highest average number of arrest per day.
+## What about race?
+```{r warning=FALSE}
+daily_count_race<-arrest %>% 
+  group_by(Arrest_Date,Descent_Code) %>% 
+  summarise(total_arrest = n()
+            )
+daily_count_race<-as.data.table(daily_count_race)
+```
+
+## Boxplot by race
+```{r warning=FALSE}
+daily_count_race[!is.na(Descent_Code)] %>% 
+  ggplot()+
+  geom_boxplot(mapping=aes(x=Descent_Code, y=total_arrest, fill=Descent_Code))+
+  xlab("Area") + ylab("Arrest Count")+
+  ggtitle("Averge Arrest Record Per Date group by Race")+
+  scale_x_discrete(labels=c("A - Other Asian", "B - Black", "C - Chinese", "D - Cambodian", "F - Filipino", "G - Guamanian", "H - Hispanic/Latin/Mexican", "I - American Indian/Alaskan Native", "J - Japanese", "K - Korean", "L - Laotian", "O - Other", "P - Pacific Islander", "S - Samoan", "U - Hawaiian", "W - White", "X - Unknown", "Z - Asian Indian"))+
+  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5,size = 10))
+```
+
+In this graph, we can observe that Hispanic, Black and White appears to have the three highest arrest record, probably because of their large population base.
+## Make a table of the  monthly average three highest arrest record races 
+```{r warning=FALSE}
+arrest_BHW<-arrest[arrest$Descent_Code=="B"|arrest$Descent_Code=="H"|arrest$Descent_Code=="W",]
+tb_BHW<-dcast(setDT(arrest[arrest$Descent_Code=="B" | arrest$Descent_Code=="H"| arrest$Descent_Code=="W",]), Arrest_Date~Descent_Code, value.var = "Arrest_Date",length)[]
+
+tb_BHW_my<-tb_BHW
+tb_BHW_my$month<-month(tb_BHW$Arrest_Date)
+tb_BHW_my$year<-year(tb_BHW$Arrest_Date)
+
+dt_BHW_my <- tb_BHW_my %>%
+  group_by(month, year) %>%
+  summarise(Mean_arrest_Black = mean(B),
+            Mean_arrest_Hispanic = mean(H),
+            Mean_arrest_White = mean(W)
+            )
+dt_BHW_my<-dt_BHW_my %>%
+  mutate(date = make_date(year, month))
+dt_BHW_my<-as.data.table(dt_BHW_my)
+dt_BHW_my = subset(dt_BHW_my,select = -c(date) )
+knitr::kable(dt_BHW_my)
+```
+## Focus on the three mostly recorded races
+```{r warning=FALSE}
+daily_count_race[Descent_Code=="B" | Descent_Code=="H"| Descent_Code=="W"] %>%
+  ggplot() + 
+    stat_summary(mapping = aes(x = Descent_Code, y = total_arrest),
+    fun.min = min,
+    fun.max = max,
+    fun = median)+
+  scale_x_discrete(labels=c("B-Black","H-Hispanic","W-White"))+
+  xlab("Race")+ylab("Arrest Record")+ggtitle("Summarize of Black, Hispanic and White")
+
+```
+
+## Plot a lineplot 
+```{r}
+ggplot(tb_BHW, aes(x=Arrest_Date)) + 
+  geom_line(aes(y = H), color = "darkgreen") + 
+  geom_line(aes(y = B), color="steelblue") +
+  geom_line(aes(y = W), color="red")+
+  xlab("Arrest Date")+ylab("Daily Arrest Record")+ggtitle("Daily Arrest lineplot")
+```
+
+Notice that the arrest record of the Black and Hispanic increased significantly on late May and Early Jun while that of Whites decreased. This is probably because of the riot of BLM activity after the death of Floyd. 
+
+## We now pick three other races 
+```{r}
+arr_CJK<-arrest[arrest$Descent_Code=="C" | arrest$Descent_Code=="J"| arrest$Descent_Code=="K"|arrest$Descent_Code=="A",]
+pal <- colorFactor(c("red","blue","green","yellow"), domain = arr_CJK$Descent_Code)
+leaflet() %>% 
+  addProviderTiles('CartoDB.Positron') %>% 
+  addCircles(
+    data = arr_CJK,
+    lat = ~LAT, lng = ~LON, 
+    opacity = 1, fillOpacity = 1, radius = 40, color = ~pal(arr_CJK$Descent_Code)
+    ) %>%
+  addLegend('bottomleft', pal=pal, values=arr_CJK$Descent_Code,
+          title='Race', opacity=1)
+```
+
+From the map, we can see that different races were arrested in different areas. Koreans were concentrated in downtown and Korean town, Chinese were also in downtown but some on Northwest LA as well. Other Asians were even more separated, while few Japanese records.
+
+## Daily arrest record table
+```{r}
+arrest_by_date<-arrest %>% 
+  group_by(Arrest_Date) %>% 
+  summarise(new_arrest = n())
+arrest_by_date<-as.data.frame(arrest_by_date)
+arrest_by_date<-transform(arrest_by_date,cummulation_arrest=cumsum(new_arrest))
+```
+
+
+## Compute monthly average arrest record
+```{r}
+arrest_by_date$month<-month(arrest_by_date$Arrest_Date)
+arrest_by_date$year<-year(arrest_by_date$Arrest_Date)
+
+month_avg <- arrest_by_date %>%
+  group_by(month, year) %>%
+  summarise(Mean_arrest = mean(new_arrest) )
+month_avg<-month_avg %>%
+  mutate(date = make_date(year, month))
+knitr::kable(month_avg)
+
+
+```
+
+## Import the COVID-19 data and change the date variable
+```{r}
+covid <- read.csv("LA_County_COVID_Cases.csv")
+covid$date<-strptime(covid$date,format="%m/%d/%Y")
+covid$date<-as.Date(covid$date,format="%m/%d/%Y")
+cov_arr<-merge(x=covid,y=arrest_by_date,by.x = "date" ,by.y = "Arrest_Date",all.x = TRUE,all.y = FALSE)
+```
+
+## Plot of daily COVID cases with arrest records and a linear regression 
+```{r warning=FALSE}
+cov_arr[] %>%
+  ggplot() + 
+  geom_point(mapping = aes(x = cases, y = new_arrest))+
+  geom_smooth(mapping = aes(x = cases, y = new_arrest),method = lm)
+```
+
+So it seems that there is a slightly increase of overall arrest as the number of COVID cases increasing. However, due to the initial lockdown and further decrease of population flow, such increase is actually more drastic.
+
+## Arrest & Unemployment
+```{r}
+unemp <- read.csv("CALOSA7URN.csv")
+unemp$DATE<-strptime(unemp$DATE,format="%Y/%m/%d")
+unemp$DATE<-as.Date(unemp$DATE,format="%m/%d/%Y")
+unemp$year <- year(unemp$DATE)
+unemp$month <- month(unemp$DATE)
+
+
+```
+
+## Get rid of useless variables
+```{r}
+month_avg = subset(month_avg)
+```
+## Focus on the data of 2020 and 2021
+```{r}
+unemp20_21<-unemp %>% filter(
+  year>=2020
+  )
+
+unemp20_21 = subset(unemp20_21, select = -c(month,year) )
+unemp_arr<-merge(x=month_avg,y=unemp20_21, by.x="date",by.y="DATE",all.x=FALSE,all.y=TRUE)
+unemp_arr$year<-as.character(unemp_arr$year)
+knitr::kable(unemp_arr)
+```
+
+## Plot of unemployment rate and mean arrest
+```{r}
+unemp_arr[] %>%
+  ggplot(mapping = aes(x = Unemployment_Rate, y = Mean_arrest, color = year, linetype = year)) +
+  geom_point() + 
+  geom_smooth(method = lm, se = FALSE)+
+  xlab("Unemployment Rate") + ylab("Average Arrest Count")+
+  ggtitle("Relation between Unemployment Rate and Arrest COunt")
+```
+
+Beyond expectation, the regression line shows a negative association between unemployment rate and arrest count. I think there are two reasons. First, the unemployment rate was low while the arrest count was high before the pandemic, which can be seen on the left up corner of the graph. Then during the lockdown, the unemployment rate grew very high, but due to the lockdown and the lack of population flow after the lock down, the arrest count decreased, such plots can be seen on the right down corner of the graph. This leads to a negative association. Also the lack of data and other confounding factors can also make misleading data.
+
+## If we facet by timeline...
+```{r}
+unemp_arr$year<-as.numeric(unemp_arr$year)
+unemp_arr$time_cat <- as.factor(ifelse(unemp_arr$month<=3 & unemp_arr$year=="2020", 'before pandemic',
+                                ifelse(unemp_arr$month<=12 & unemp_arr$year=="2020", 'lockdown',
+                                 "after lockdown")))
+unemp_arr[] %>% 
+  ggplot() + 
+  geom_point(mapping = aes(x = Unemployment_Rate, y = Mean_arrest, color=time_cat)) + 
+  facet_wrap(~ time_cat, nrow = 1)+
+  xlab("Unemployment Rate") + ylab("Average Arrest Count")+
+  ggtitle("Unemployment Rate and Arrest COunt Facet by Timeline")
+```
+
+Observing the graph, we can see that the monthly average arrest count was high before the pandemic, but dropped drastically during the lockdown, then rose a little after the lockdown. 
+
+## Conclusion
+Among the overall arrest record from 2020 to present, most arrests were recorded in the afternoon and evening, those in the afternoon are more likely to be released from custody, while those in the evening and before dawn are more likely to be booked into jail. Number of males that is arrested is much higher than the number of females. By age, People between 20-40 years old contributed the most record. By races, Hispanic, Black and White had the highest number of arrest record, maybe because of their large population base. The generalized location where each race got caught also differed, which makes sense as Koreans are more concentrated in K town, Chinese in Chinatown and San Gabriel etc. After combining the arrest record with the COVID cases, we can see a slightly rise of arrest record as the infected number increases. If we combine the arrest record with the unemployment rate, we can see that the arrest record decreased as the unemployment rate increased suprisingly. Maybe this is because of the lockdown not only caused unemployment, but also caused a large decrease of population flow. Few people on street maybe associate with less crime which finally lead to less arrest records.
+ 
